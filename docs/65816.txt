@@ -1,0 +1,102 @@
+
+
+                                 ACME
+
+         ...the ACME Crossassembler for Multiple Environments
+
+                        --- 65816  support ---
+
+
+This text contains information about the 65816-specific features of
+ACME.
+
+
+----------------------------------------------------------------------
+Section:   Aliases for "long" JMPs and JSRs
+----------------------------------------------------------------------
+
+In addition to the mnemonics JMP and JSR, the 65816 processor also
+knows JML and JSL, which are JMP and JSR using new (long) addressing
+modes. ACME also accepts the new addressing modes when using the old
+mnemonics JMP and JSR, but the old addressing modes cannot be used
+with the new mnemonics JML and JSL.
+
+
+----------------------------------------------------------------------
+Section:   Argument order of MVN/MVP
+----------------------------------------------------------------------
+
+According to WDC's official syntax for 65816 assembly language, the
+argument order of the MVN and MVP instructions differs between
+assembly language and machine code.
+To copy bytes from bank $ab to bank $cd, use the following statement:
+    mvn $ab, $cd        ; source bank $ab, destination bank $cd
+or
+    mvn #$ab, #$cd      ; source bank $ab, destination bank $cd
+ACME will then produce the following machine code:
+    $54 $cd $ab ; opcode mvn, destination bank $cd, source bank $ab
+
+ACME 0.05 and earlier did it the wrong way.
+
+
+----------------------------------------------------------------------
+Section:   Register lengths
+----------------------------------------------------------------------
+
+When assembling "lda #5" for example, ACME has to know whether to
+create an 8-bit argument or a 16-bit argument. This depends on the
+current register length.
+On startup, ACME assumes all registers are 8 bits wide. You can change
+this at any time using the following pseudo opcodes:
+
+		!al	; switch to long accumulator
+		!as	; switch to short accumulator
+		!rl	; switch to long index registers
+		!rs	; switch to short index registers
+
+Please note that ACME, unlike some other assemblers, does *not* track
+SEP/REP instructions: I don't like that method - it fails when
+encountering PLPs, for example. So if it doesn't work reliably in the
+first place, why use it? :)
+
+If you don't like that you always have to use a pseudo opcode
+alongside SEP/REP instructions, then have a look at the library file
+<65816/std.a> which has some predefined macros you can use.
+
+
+----------------------------------------------------------------------
+Section:   Postfixing stuff
+----------------------------------------------------------------------
+
+You can also use the postfix method (which is explained in the file
+"AddrModes.txt") to specify the immediate argument's length:
+
+		ldx+2 #5
+
+will always be assembled to a 16-bit argument, regardless of the
+currently configured index register width. Use at your own risk - this
+method obviously is not a good example on structured programming. :)
+
+
+----------------------------------------------------------------------
+Section:   Miscellaneous
+----------------------------------------------------------------------
+
+The 65816 CPU has an address space of 16 MBytes, but that is still
+split up into 256 "banks" of 64 KBytes each: A simple "JMP $1234"
+instruction does not necessarily jump to $001234, it rather jumps to
+address $1234 _in_the_bank_where_the_code_is_currently_running_.
+Therefore, it does not make sense to use 24-bit values for most
+labels. On the other hand, when jumping between banks, you need the
+full 24-bit address.
+One solution for this problem would be something like this:
+
+	; this code is supposed to run at $1000 in bank 2:
+	* = $021000	; we use the correct 24-bit address, but we
+	!pseudopc * & $ffff {	; restrict the pc to 16 bits
+start		lda some_var	; now "start" is $1000
+		beq some_label
+		...
+	}
+This way, referencing "start" will give you the 16-bit value ($1000),
+but referencing "&start" will give the full 24-bit value ($021000).
